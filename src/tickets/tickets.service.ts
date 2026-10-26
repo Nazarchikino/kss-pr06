@@ -1,11 +1,24 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CLOCK, type Clock } from '../common/clock.js';
-import { paginate, type Page } from '../common/page.js';
+import { PageQueryDto, paginate, type Page } from '../common/page.js';
 import { createFieldErrorException } from '../common/validation.js';
 import { UsersService } from '../users/users.service.js';
+import { CreateCommentDto } from './dto/create-comment.dto.js';
 import { CreateTicketDto } from './dto/create-ticket.dto.js';
 import { TicketsQueryDto } from './dto/tickets-query.dto.js';
-import type { Priority, Ticket } from './ticket.model.js';
+import { UpdateTicketDto } from './dto/update-ticket.dto.js';
+import { STATUS_TRANSITIONS } from './ticket-status.js';
+import type {
+  Comment,
+  Priority,
+  Ticket,
+  TicketStatus,
+} from './ticket.model.js';
 import { TicketsRepository } from './tickets.repository.js';
 
 const PRIORITY_WEIGHT: Readonly<Record<Priority, number>> = {
@@ -87,8 +100,101 @@ export class TicketsService {
     });
   }
 
+  async update(id: number, dto: UpdateTicketDto): Promise<Ticket> {
+    const definedEntries = Object.entries(dto).filter(
+      ([, value]) => value !== undefined,
+    );
+    if (definedEntries.length === 0) {
+      throw createFieldErrorException(
+        'body',
+        'Тіло запиту має містити хоча б одне поле для оновлення',
+      );
+    }
+
+    await this.findOne(id);
+
+    if (
+      dto.assigneeId !== undefined &&
+      dto.assigneeId !== null &&
+      !this.users.find(dto.assigneeId)
+    ) {
+      throw createFieldErrorException(
+        'assigneeId',
+        `Виконавця з id=${dto.assigneeId} не існує`,
+      );
+    }
+
+    const patch: Partial<Omit<Ticket, 'id'>> = {
+      updatedAt: this.clock.now().toISOString(),
+    };
+    if (dto.title !== undefined) patch.title = dto.title;
+    if (dto.description !== undefined) patch.description = dto.description;
+    if (dto.priority !== undefined) patch.priority = dto.priority;
+    if (dto.tags !== undefined) patch.tags = [...dto.tags];
+    if (dto.assigneeId !== undefined) patch.assigneeId = dto.assigneeId;
+
+    const updated = await this.repo.update(id, patch);
+    if (!updated) throw new NotFoundException(`Заявку з id=${id} не знайдено`);
+    return updated;
+  }
+
+  async changeStatus(id: number, status: TicketStatus): Promise<Ticket> {
+    const ticket = await this.findOne(id);
+    const allowed = STATUS_TRANSITIONS[ticket.status];
+    if (!allowed.includes(status)) {
+      throw new ConflictException({
+        message: `Перехід зі стану "${ticket.status}" у "${status}" недопустимий`,
+        allowed,
+      });
+    }
+    const updated = await this.repo.update(id, {
+      status,
+      updatedAt: this.clock.now().toISOString(),
+    });
+    if (!updated) throw new NotFoundException(`Заявку з id=${id} не знайдено`);
+    return updated;
+  }
+
   async remove(id: number): Promise<void> {
     const removed = await this.repo.remove(id);
     if (!removed) throw new NotFoundException(`Заявку з id=${id} не знайдено`);
+  }
+
+  async findComments(
+    ticketId: number,
+    query: PageQueryDto = new PageQueryDto(),
+  ): Promise<Page<Comment>> {
+    await this.findOne(ticketId);
+    const comments = await this.repo.findComments(ticketId);
+    return paginate(comments, query.page ?? 1, query.pageSize ?? 10);
+  }
+
+  async findComment(ticketId: number, commentId: number): Promise<Comment> {
+    await this.findOne(ticketId);
+    const comments = await this.repo.findComments(ticketId);
+    const comment = comments.find((c) => c.id === commentId);
+    if (!comment) {
+      throw new NotFoundException(`Коментар з id=${commentId} не знайдено`);
+    }
+    return comment;
+  }
+
+  async addComment(
+    ticketId: number,
+    dto: CreateCommentDto,
+  ): Promise<Comment> {
+    await this.findOne(ticketId);
+    if (!this.users.find(dto.authorId)) {
+      throw createFieldErrorException(
+        'authorId',
+        `Автора з id=${dto.authorId} не існує`,
+      );
+    }
+    return this.repo.addComment({
+      ticketId,
+      authorId: dto.authorId,
+      text: dto.text,
+      createdAt: this.clock.now().toISOString(),
+    });
   }
 }

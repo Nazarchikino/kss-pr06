@@ -1,4 +1,4 @@
-import type { Ticket } from './ticket.model.js';
+import type { Comment, Ticket } from './ticket.model.js';
 
 /**
  * Абстракція сховища заявок. Абстрактний клас (а не інтерфейс) існує під час виконання,
@@ -10,5 +10,11 @@ export abstract class TicketsRepository {
   ): Promise<Ticket[]>;
   abstract findById(id: number): Promise<Ticket | undefined>;
   abstract create(data: Omit<Ticket, 'id'>): Promise<Ticket>;
+  abstract update(
+    id: number,
+    patch: Partial<Omit<Ticket, 'id'>>,
+  ): Promise<Ticket | undefined>;
   abstract remove(id: number): Promise<boolean>;
+  abstract findComments(ticketId: number): Promise<Comment[]>;
+  abstract addComment(data: Omit<Comment, 'id'>): Promise<Comment>;
 }
