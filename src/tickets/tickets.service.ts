@@ -90,6 +90,14 @@ export class TicketsService {
     return this.repo.create({
       title: input.title,
       ...(input.description ? { description: input.description } : {}),
+      ...(input.attachments
+        ? {
+            attachments: input.attachments.map((a) => ({
+              url: a.url,
+              size: a.size,
+            })),
+          }
+        : {}),
       status: 'open',
       priority: input.priority,
       authorId: input.authorId,
@@ -179,10 +187,7 @@ export class TicketsService {
     return comment;
   }
 
-  async addComment(
-    ticketId: number,
-    dto: CreateCommentDto,
-  ): Promise<Comment> {
+  async addComment(ticketId: number, dto: CreateCommentDto): Promise<Comment> {
     await this.findOne(ticketId);
     if (!this.users.find(dto.authorId)) {
       throw createFieldErrorException(

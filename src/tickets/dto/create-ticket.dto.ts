@@ -1,4 +1,4 @@
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
@@ -6,11 +6,26 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUrl,
   Length,
+  Max,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
 import { PRIORITIES, type Priority } from '../ticket.model.js';
+
+export const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024; // 10 МБ (10_485_760 байтів)
+
+export class AttachmentDto {
+  @IsUrl({}, { message: 'url має бути коректною URL-адресою' })
+  url: string;
+
+  @IsInt()
+  @Min(1)
+  @Max(MAX_ATTACHMENT_SIZE)
+  size: number;
+}
 
 export class CreateTicketDto {
   @Transform(({ value }: { value: unknown }) =>
@@ -39,4 +54,11 @@ export class CreateTicketDto {
   @ArrayMaxSize(10)
   @IsString({ each: true })
   tags?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5)
+  @ValidateNested({ each: true })
+  @Type(() => AttachmentDto)
+  attachments?: AttachmentDto[];
 }

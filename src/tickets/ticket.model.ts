@@ -14,6 +14,11 @@ export const PRIORITIES: readonly Priority[] = [
   'critical',
 ];
 
+export interface Attachment {
+  url: string;
+  size: number;
+}
+
 export interface Ticket {
   readonly id: number;
   title: string;
@@ -25,6 +30,7 @@ export interface Ticket {
   createdAt: string;
   updatedAt: string;
   tags: string[];
+  attachments?: Attachment[];
 }
 
 export interface Comment {

@@ -1,0 +1,68 @@
+@base = http://localhost:3000/api/v1
+
+### 1. Стан застосунку (GET /health)
+GET {{base}}/health
+
+### 2. Колекція заявок з фільтрацією, сортуванням і пагінацією
+GET {{base}}/tickets?status=open&sort=-priority&page=1&pageSize=5
+
+### 3. Створення заявки з вкладеннями (201 + Location)
+POST {{base}}/tickets
+Content-Type: application/json
+
+{
+  "title": "  Не працює миша в ауд. 305  ",
+  "description": "Потрібна заміна USB-миші",
+  "priority": "low",
+  "authorId": 1,
+  "tags": ["обладнання"],
+  "attachments": [
+    { "url": "https://files.college.example.ua/photo1.jpg", "size": 245760 }
+  ]
+}
+
+### 4. [Таблиця 1 – Запит 1] Порожня назва після trim, невідомий пріоритет і зайве поле status → 422
+POST {{base}}/tickets
+Content-Type: application/json
+
+{ "title": "  ", "priority": "urgent", "authorId": 1, "status": "closed" }
+
+### 5. [Таблиця 1 – Запит 2] Некоректні параметри рядка запиту (pageSize > 50, невідомий параметр foo) → 422
+GET {{base}}/tickets?page=0&pageSize=100&foo=1
+
+### 6. [Таблиця 1 – Запит 3] Неіснуючий автор заявки (authorId = 42) → 422
+POST {{base}}/tickets
+Content-Type: application/json
+
+{ "title": "Заміна кабелю", "priority": "medium", "authorId": 42 }
+
+### 7. [Таблиця 1 – Запит 4] Порожнє тіло PATCH-запиту → 422
+PATCH {{base}}/tickets/1
+Content-Type: application/json
+
+{}
+
+### 8. [Таблиця 1 – Запит 5] Недопустимий перехід стану (open → resolved) → 409
+POST {{base}}/tickets/1/status
+Content-Type: application/json
+
+{ "status": "resolved" }
+
+### 9. [Додаткове завдання 1] Некоректне вкладення (attachments.0.url та attachments.0.size > 10 МБ) → 422
+POST {{base}}/tickets
+Content-Type: application/json
+
+{
+  "title": "Скріншот помилки",
+  "priority": "medium",
+  "authorId": 1,
+  "attachments": [
+    { "url": "not-a-valid-url", "size": 20000000 }
+  ]
+}
+
+### 10. Додавання коментаря до заявки (201 + Location)
+POST {{base}}/tickets/1/comments
+Content-Type: application/json
+
+{ "text": " Замінили HDMI-кабель, сигнал з'явився ", "authorId": 3 }
