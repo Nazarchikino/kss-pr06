@@ -1,22 +1,19 @@
-import {
-  Inject,
-  Injectable,
-  NotFoundException,
-  UnprocessableEntityException,
-} from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { CLOCK, type Clock } from '../common/clock.js';
+import { paginate, type Page } from '../common/page.js';
+import { createFieldErrorException } from '../common/validation.js';
 import { UsersService } from '../users/users.service.js';
-import type { Priority, Ticket, TicketStatus } from './ticket.model.js';
+import { CreateTicketDto } from './dto/create-ticket.dto.js';
+import { TicketsQueryDto } from './dto/tickets-query.dto.js';
+import type { Priority, Ticket } from './ticket.model.js';
 import { TicketsRepository } from './tickets.repository.js';
 
-/** Дані для створення заявки (у ПР6 стане класом DTO з валідацією). */
-export interface CreateTicketInput {
-  title: string;
-  description?: string;
-  priority: Priority;
-  authorId: number;
-  tags?: string[];
-}
+const PRIORITY_WEIGHT: Readonly<Record<Priority, number>> = {
+  low: 1,
+  medium: 2,
+  high: 3,
+  critical: 4,
+};
 
 @Injectable()
 export class TicketsService {
@@ -26,10 +23,41 @@ export class TicketsService {
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
-  findAll(
-    filter: { status?: TicketStatus; authorId?: number } = {},
-  ): Promise<Ticket[]> {
-    return this.repo.findAll(filter);
+  async findAll(
+    query: TicketsQueryDto = new TicketsQueryDto(),
+  ): Promise<Page<Ticket>> {
+    const all = await this.repo.findAll();
+    const needle = query.q?.trim().toLowerCase();
+
+    const filtered = all.filter((t) => {
+      if (query.status !== undefined && t.status !== query.status) return false;
+      if (query.priority !== undefined && t.priority !== query.priority)
+        return false;
+      if (query.authorId !== undefined && t.authorId !== query.authorId)
+        return false;
+      if (query.assigneeId !== undefined && t.assigneeId !== query.assigneeId)
+        return false;
+      if (needle) {
+        const inTitle = t.title.toLowerCase().includes(needle);
+        const inDesc = (t.description ?? '').toLowerCase().includes(needle);
+        if (!inTitle && !inDesc) return false;
+      }
+      return true;
+    });
+
+    const sort = query.sort ?? '-createdAt';
+    const dir = sort.startsWith('-') ? -1 : 1;
+    const key = sort.startsWith('-') ? sort.slice(1) : sort;
+
+    filtered.sort((a, b) => {
+      const diff =
+        key === 'priority'
+          ? (PRIORITY_WEIGHT[a.priority] - PRIORITY_WEIGHT[b.priority]) * dir
+          : a.createdAt.localeCompare(b.createdAt) * dir;
+      return diff !== 0 ? diff : a.id - b.id;
+    });
+
+    return paginate(filtered, query.page ?? 1, query.pageSize ?? 10);
   }
 
   async findOne(id: number): Promise<Ticket> {
@@ -38,9 +66,10 @@ export class TicketsService {
     return ticket;
   }
 
-  async create(input: CreateTicketInput): Promise<Ticket> {
+  async create(input: CreateTicketDto): Promise<Ticket> {
     if (!this.users.find(input.authorId)) {
-      throw new UnprocessableEntityException(
+      throw createFieldErrorException(
+        'authorId',
         `Автора з id=${input.authorId} не існує`,
       );
     }
