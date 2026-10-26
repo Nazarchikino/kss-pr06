@@ -1,4 +1,5 @@
 import {
+  StandardSchemaValidationPipe,
   UnprocessableEntityException,
   ValidationPipe,
   type ValidationError,
@@ -43,5 +44,33 @@ export function createValidationPipe(): ValidationPipe {
         message: 'Дані не відповідають вимогам',
         errors: flattenValidationErrors(errors),
       }),
+  });
+}
+
+export function createStandardSchemaValidationPipe(): StandardSchemaValidationPipe {
+  return new StandardSchemaValidationPipe({
+    transform: true,
+    exceptionFactory: (issues) => {
+      const errors: FieldError[] = issues.flatMap((issue) => {
+        if ('keys' in issue && Array.isArray(issue.keys)) {
+          return issue.keys.map((key) => ({
+            field: String(key),
+            message: issue.message,
+          }));
+        }
+        const path = (issue.path ?? [])
+          .map((seg) =>
+            typeof seg === 'object' && seg !== null && 'key' in seg
+              ? String(seg.key)
+              : String(seg),
+          )
+          .join('.');
+        return [{ field: path || 'body', message: issue.message }];
+      });
+      return new UnprocessableEntityException({
+        message: 'Дані не відповідають вимогам',
+        errors,
+      });
+    },
   });
 }

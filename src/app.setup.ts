@@ -1,5 +1,8 @@
 import type { INestApplication } from '@nestjs/common';
-import { createValidationPipe } from './common/validation.js';
+import {
+  createStandardSchemaValidationPipe,
+  createValidationPipe,
+} from './common/validation.js';
 
 /**
  * Спільні налаштування застосунку. Викликається і в main.ts, і в e2e-тестах,
@@ -7,7 +10,10 @@ import { createValidationPipe } from './common/validation.js';
  */
 export function configureApp(app: INestApplication): INestApplication {
   app.setGlobalPrefix('api/v1');
-  app.useGlobalPipes(createValidationPipe());
+  app.useGlobalPipes(
+    createStandardSchemaValidationPipe(),
+    createValidationPipe(),
+  );
   app.enableShutdownHooks();
   return app;
 }

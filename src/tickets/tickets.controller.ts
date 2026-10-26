@@ -15,7 +15,10 @@ import type { Response } from 'express';
 import { PageQueryDto, type Page } from '../common/page.js';
 import { ChangeStatusDto } from './dto/change-status.dto.js';
 import { CreateCommentDto } from './dto/create-comment.dto.js';
-import { CreateTicketDto } from './dto/create-ticket.dto.js';
+import {
+  createTicketSchema,
+  type CreateTicketSchemaInput,
+} from './dto/create-ticket.schema.js';
 import { TicketsQueryDto } from './dto/tickets-query.dto.js';
 import { UpdateTicketDto } from './dto/update-ticket.dto.js';
 import type { Comment, Ticket } from './ticket.model.js';
@@ -37,7 +40,7 @@ export class TicketsController {
 
   @Post()
   async create(
-    @Body() body: CreateTicketDto,
+    @Body({ schema: createTicketSchema }) body: CreateTicketSchemaInput,
     @Res({ passthrough: true }) res: Response,
   ): Promise<Ticket> {
     const created = await this.tickets.create(body);
